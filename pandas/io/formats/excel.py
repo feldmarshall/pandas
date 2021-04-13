@@ -10,6 +10,7 @@ from typing import (
     Dict,
     Hashable,
     Iterable,
+    Literal,
     Mapping,
     Optional,
     Sequence,
@@ -444,8 +445,12 @@ class ExcelFormatter:
         Column label for index column(s) if desired. If None is given, and
         `header` and `index` are True, then the index names are used. A
         sequence should be given if the DataFrame uses MultiIndex.
-    merge_cells : bool, default False
+    merge_cells : bool, {'index', 'columns'}, default False
         Format MultiIndex and Hierarchical Rows as merged cells.
+            If passed True, merges cells both in rows and columns.
+            If passed 'index', merges cells only in rows.
+            If passed 'columns', merges cells only in columns.
+
     inf_rep : str, default `'inf'`
         representation for np.inf values (which aren't representable in Excel)
         A `'-'` sign will be added in front of -inf.
@@ -468,7 +473,7 @@ class ExcelFormatter:
         header: Union[Sequence[Hashable], bool] = True,
         index: bool = True,
         index_label: Optional[IndexLabel] = None,
-        merge_cells: bool = False,
+        merge_cells: Union[bool, Literal['index', 'columns']] = False,
         inf_rep: str = "inf",
         style_converter: Optional[Callable] = None,
     ):
@@ -544,10 +549,15 @@ class ExcelFormatter:
 
         if not (self._has_aliases or self.header):
             return
-
+        merge_columns_cells = self.merge_cells
+        if isinstance(self.merge_cells, str):
+            if self.merge_cells == "columns":
+                merge_columns_cells = True
+            elif self.merge_cells == "index":
+                merge_columns_cells = False
         columns = self.columns
         level_strs = columns.format(
-            sparsify=self.merge_cells, adjoin=False, names=False
+            sparsify=merge_columns_cells, adjoin=False, names=False
         )
         level_lengths = get_level_lengths(level_strs)
         coloffset = 0
@@ -556,7 +566,7 @@ class ExcelFormatter:
         if self.index and isinstance(self.df.index, MultiIndex):
             coloffset = len(self.df.index[0]) - 1
 
-        if self.merge_cells:
+        if merge_columns_cells:
             # Format multi-index as a merged cells.
             for lnum, name in enumerate(columns.names):
                 yield ExcelCell(
@@ -698,7 +708,13 @@ class ExcelFormatter:
             # with index names (blank if None) for
             # unambiguous round-trip, unless not merging,
             # in which case the names all go on one row Issue #11328
-            if isinstance(self.columns, MultiIndex) and self.merge_cells:
+            merge_column_cells = self.merge_cells
+            if isinstance(self.merge_cells, str):
+                if self.merge_cells == "columns":
+                    merge_column_cells = True
+                elif self.merge_cells == "index":
+                    merge_column_cells = False
+            if isinstance(self.columns, MultiIndex) and merge_column_cells:
                 self.rowcounter += 1
 
             # if index labels are not empty go ahead and dump
@@ -707,7 +723,14 @@ class ExcelFormatter:
                 for cidx, name in enumerate(index_labels):
                     yield ExcelCell(self.rowcounter - 1, cidx, name, self.header_style)
 
-            if self.merge_cells:
+            merge_index_cells = self.merge_cells
+            if isinstance(self.merge_cells, str):
+                if self.merge_cells == "index":
+                    merge_index_cells = True
+                elif self.merge_cells == "columns":
+                    merge_index_cells = False
+
+            if merge_index_cells:
                 # Format hierarchical rows as merged cells.
                 level_strs = self.df.index.format(
                     sparsify=True, adjoin=False, names=False

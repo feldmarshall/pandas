@@ -783,7 +783,14 @@ class TestExcelWriter:
         new_cols_index = MultiIndex.from_tuples([(40, 1), (40, 2), (50, 1), (50, 2)])
         frame.columns = new_cols_index
         header = [0, 1]
-        if not merge_cells:
+        merge_columns = False
+        if isinstance(merge_cells, str):
+            if merge_cells == 'columns':
+                merge_columns = True
+        elif isinstance(merge_cells, bool):
+            merge_columns = merge_cells
+
+        if not merge_columns:
             header = 0
 
         # round trip
@@ -792,10 +799,46 @@ class TestExcelWriter:
             df = pd.read_excel(
                 reader, sheet_name="test1", header=header, index_col=[0, 1]
             )
-        if not merge_cells:
+        if not merge_columns:
             fm = frame.columns.format(sparsify=False, adjoin=False, names=False)
             frame.columns = [".".join(map(str, q)) for q in zip(*fm)]
         tm.assert_frame_equal(frame, df)
+
+    def test_to_excel_multiindex_rows(self, merge_cells, frame, path):
+        df = tm.makeDataFrame()
+        df.index = pd.MultiIndex.from_product([
+            df.index[:int(len(df)/2)], ["foo", "bar"]
+        ])
+        df.columns = pd.MultiIndex.from_tuples([
+            ("Group 1", "A"),
+            ("Group 1", "B"),
+            ("Group 2", "C"),
+            ("Group 2", "D"),
+
+        ])
+        df.to_excel(path, merge_cells=merge_cells)
+        merge_indices = True
+        merge_columns = True
+        if isinstance(merge_cells, str):
+            if merge_cells == 'columns':
+                merge_indices = False
+            elif merge_cells == 'index':
+                merge_columns = False
+        elif isinstance(merge_cells, bool):
+            merge_columns = merge_cells
+            merge_indices = merge_cells
+
+        if merge_indices:
+            raw = pd.read_excel(path)
+            header = [0, 1]
+            if not merge_columns:
+                header = 0
+            result = pd.read_excel(
+                path, index_col=[0, 1], header=header).fillna(method="ffill")
+            if not merge_columns:
+                result.columns = pd.MultiIndex.from_tuples(
+                    (column.split(".") for column in result.columns))
+            tm.assert_frame_equal(df, result)
 
     def test_to_excel_multiindex_dates(self, merge_cells, tsframe, path):
         # try multiindex with dates

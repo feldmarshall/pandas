@@ -20,7 +20,7 @@ def tsframe():
     return tm.makeTimeDataFrame()[:5]
 
 
-@pytest.fixture(params=[True, False])
+@pytest.fixture(params=[True, False, "index", "columns"])
 def merge_cells(request):
     return request.param
 
