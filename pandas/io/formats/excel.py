@@ -549,12 +549,7 @@ class ExcelFormatter:
 
         if not (self._has_aliases or self.header):
             return
-        merge_columns_cells = self.merge_cells
-        if isinstance(self.merge_cells, str):
-            if self.merge_cells == "columns":
-                merge_columns_cells = True
-            elif self.merge_cells == "index":
-                merge_columns_cells = False
+        merge_columns_cells = self._merge_cells_in_axis(axis=1)
         columns = self.columns
         level_strs = columns.format(
             sparsify=merge_columns_cells, adjoin=False, names=False
@@ -708,12 +703,7 @@ class ExcelFormatter:
             # with index names (blank if None) for
             # unambiguous round-trip, unless not merging,
             # in which case the names all go on one row Issue #11328
-            merge_column_cells = self.merge_cells
-            if isinstance(self.merge_cells, str):
-                if self.merge_cells == "columns":
-                    merge_column_cells = True
-                elif self.merge_cells == "index":
-                    merge_column_cells = False
+            merge_column_cells = self._merge_cells_in_axis(axis=1)
             if isinstance(self.columns, MultiIndex) and merge_column_cells:
                 self.rowcounter += 1
 
@@ -723,13 +713,7 @@ class ExcelFormatter:
                 for cidx, name in enumerate(index_labels):
                     yield ExcelCell(self.rowcounter - 1, cidx, name, self.header_style)
 
-            merge_index_cells = self.merge_cells
-            if isinstance(self.merge_cells, str):
-                if self.merge_cells == "index":
-                    merge_index_cells = True
-                elif self.merge_cells == "columns":
-                    merge_index_cells = False
-
+            merge_index_cells = self._merge_cells_in_axis(axis=0)
             if merge_index_cells:
                 # Format hierarchical rows as merged cells.
                 level_strs = self.df.index.format(
@@ -776,6 +760,25 @@ class ExcelFormatter:
                     gcolidx += 1
 
         yield from self._generate_body(gcolidx)
+
+    def _merge_cells_in_axis(self, axis):
+        merge = self.merge_cells
+        if not isinstance(self.merge_cells, (bool, str)):
+            axis_dict = {0: "index", 1: "columns"}
+            try:
+                merge = axis_dict[self.merge_cells]
+            except KeyError as err:
+                raise ValueError("Not a valid merge_cells argument") from err
+
+        if isinstance(merge, str):
+            if merge == "index":
+                return axis == 0
+            elif merge == "columns":
+                return axis == 1
+            else:
+                raise ValueError("Not a valid merge_cells argument")
+
+        return self.merge_cells
 
     @property
     def _has_aliases(self) -> bool:
